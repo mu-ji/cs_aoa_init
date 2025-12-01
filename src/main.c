@@ -21,6 +21,9 @@
 #include <bluetooth/gatt_dm.h>
 #include <bluetooth/cs_de.h>
 
+#include <string.h>
+// #include <cs_de_data_report.h>
+
 #include <dk_buttons_and_leds.h>
 
 #include <zephyr/logging/log.h>
@@ -61,6 +64,14 @@ static uint8_t buffer_index;
 static uint8_t buffer_num_valid;
 static cs_de_dist_estimates_t distance_estimate_buffer[MAX_AP][DE_SLIDING_WINDOW_SIZE];
 
+static char ADDRESS[BT_ADDR_LE_STR_LEN];
+static cs_de_report_t cs_report;
+static int tone_quality;
+
+static float i_local[75];
+static float q_local[75];
+static float i_remote[75];
+static float q_remote[75];
 static void store_distance_estimates(cs_de_report_t *p_report)
 {
 	int lock_state = k_mutex_lock(&distance_estimate_buffer_mutex, K_FOREVER);
@@ -170,6 +181,18 @@ static void ranging_data_cb(struct bt_conn *conn, uint16_t ranging_counter, int 
 
 	cs_de_populate_report(&latest_local_steps, &latest_peer_steps, BT_CONN_LE_CS_ROLE_INITIATOR,
 			      &cs_de_report);
+	
+	cs_report = cs_de_report;
+	memcpy(i_local, cs_report.iq_tones->i_local, sizeof(cs_report.iq_tones->i_local));
+	memcpy(q_local, cs_report.iq_tones->q_local, sizeof(cs_report.iq_tones->q_local));
+	memcpy(i_remote, cs_report.iq_tones->i_remote, sizeof(cs_report.iq_tones->i_remote));
+	memcpy(q_remote, cs_report.iq_tones->q_remote, sizeof(cs_report.iq_tones->q_remote));
+
+	if (cs_de_report.tone_quality[1] == CS_DE_TONE_QUALITY_OK) {
+		tone_quality = 1;
+	} else {
+		tone_quality = 2;
+	};
 
 	net_buf_simple_reset(&latest_local_steps);
 
@@ -180,6 +203,7 @@ static void ranging_data_cb(struct bt_conn *conn, uint16_t ranging_counter, int 
 	k_sem_give(&sem_local_steps);
 
 	cs_de_quality_t quality = cs_de_calc(&cs_de_report);
+	
 
 	if (quality == CS_DE_QUALITY_OK) {
 		for (uint8_t ap = 0; ap < cs_de_report.n_ap; ap++) {
@@ -458,7 +482,7 @@ static void scan_filter_match(struct bt_scan_device_info *device_info,
 	char addr[BT_ADDR_LE_STR_LEN];
 
 	bt_addr_le_to_str(device_info->recv_info->addr, addr, sizeof(addr));
-
+	strcpy(ADDRESS, addr);
 	LOG_INF("Filters matched. Address: %s connectable: %d", addr, connectable);
 }
 
@@ -519,26 +543,9 @@ BT_CONN_CB_DEFINE(conn_cb) = {
 	.le_cs_subevent_data_available = subevent_result_cb,
 };
 
-int main(void)
-{
+
+static int connect_and_prepare(void) {
 	int err;
-
-	LOG_INF("Starting Channel Sounding Initiator Sample");
-
-	dk_leds_init();
-
-	err = bt_enable(NULL);
-	if (err) {
-		LOG_ERR("Bluetooth init failed (err %d)", err);
-		return 0;
-	}
-
-	err = scan_init();
-	if (err) {
-		LOG_ERR("Scan init failed (err %d)", err);
-		return 0;
-	}
-
 	err = bt_scan_start(BT_SCAN_TYPE_SCAN_PASSIVE);
 	if (err) {
 		LOG_ERR("Scanning failed to start (err %i)", err);
@@ -703,23 +710,80 @@ int main(void)
 		return 0;
 	}
 
-	while (true) {
-		k_sleep(K_MSEC(5000));
+	return 0;
+}
 
-		if (buffer_num_valid != 0) {
-			for (uint8_t ap = 0; ap < MAX_AP; ap++) {
-				cs_de_dist_estimates_t distance_on_ap = get_distance(ap);
 
-				LOG_INF("Distance estimates on antenna path %u: ifft: %f, "
-					"phase_slope: %f, rtt: %f",
-					ap, (double)distance_on_ap.ifft,
-					(double)distance_on_ap.phase_slope,
-					(double)distance_on_ap.rtt);
-			}
-		}
+int main(void)
+{
+	int err;
+	bool connect_flag;
 
-		LOG_INF("Sleeping for a few seconds...");
+	LOG_INF("Starting Channel Sounding Initiator Sample");
+
+	dk_leds_init();
+
+	err = bt_enable(NULL);
+	if (err) {
+		LOG_ERR("Bluetooth init failed (err %d)", err);
+		return 0;
 	}
+
+	err = scan_init();
+	if (err) {
+		LOG_ERR("Scan init failed (err %d)", err);
+		return 0;
+	}
+
+	connect_flag = true;
+	while (connect_flag) {
+		connect_and_prepare();
+	
+		k_sleep(K_MSEC(1000));
+
+		cs_de_dist_estimates_t distance_on_ap = get_distance(0);
+		LOG_INF("size of: %d", sizeof(cs_report.iq_tones->q_local));
+		// memcpy(q_local, cs_report.iq_tones->q_local, sizeof(cs_report.iq_tones->q_local));
+		// memcpy(i_local, cs_report.iq_tones->i_local, sizeof(cs_report.iq_tones->i_local));
+		LOG_INF("tone_qulity: %d", tone_quality);
+		if (tone_quality == 1) {
+			LOG_INF("-----------------------------------");		
+			for (int i = 0; i < 75; i++) {
+				LOG_INF("i_local : %f", (double)i_local[i]);
+				LOG_INF("q_local : %f", (double)q_local[i]);
+				LOG_INF("i_remote : %f", (double)i_remote[i]);
+				LOG_INF("q_remote : %f", (double)q_remote[i]);
+			}
+			LOG_INF("Distance estimates on antenna path %u: ifft: %f, "
+				"phase_slope: %f, rtt: %f, Address: %s",
+				0, (double)distance_on_ap.ifft,
+				(double)distance_on_ap.phase_slope,
+				(double)distance_on_ap.rtt,
+				ADDRESS);
+			LOG_INF("-----------------------------------");	
+		} 
+
+		disconnected_cb(connection, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+
+	}
+
+	// while (true) {
+	// 	k_sleep(K_MSEC(5000));
+
+	// 	if (buffer_num_valid != 0) {
+	// 		for (uint8_t ap = 0; ap < MAX_AP; ap++) {
+	// 			cs_de_dist_estimates_t distance_on_ap = get_distance(ap);
+
+	// 			LOG_INF("Distance estimates on antenna path %u: ifft: %f, "
+	// 				"phase_slope: %f, rtt: %f",
+	// 				ap, (double)distance_on_ap.ifft,
+	// 				(double)distance_on_ap.phase_slope,
+	// 				(double)distance_on_ap.rtt);
+	// 		}
+	// 	}
+
+	// 	LOG_INF("Sleeping for a few seconds...");
+	// }
 
 	return 0;
 }
