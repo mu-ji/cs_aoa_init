@@ -107,7 +107,7 @@ def reconstruct_full_spectrum(i_data, q_data, mask_list):
     
     # 将使用的信道数据填入对应位置
     full_spectrum[used_channel_indices] = iq_data_used
-    full_spectrum = compensate_cable_phase(full_spectrum)
+    # full_spectrum = compensate_cable_phase(full_spectrum)
 
     return full_spectrum
 

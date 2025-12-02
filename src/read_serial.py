@@ -309,9 +309,9 @@ if __name__ == "__main__":
     # filename_prefix: 输出文件名前缀
     # max_records: 最大记录数，达到后自动停止
     read_and_process_serial(
-        port='COM20',
-        out_folder = 'antenna_equipment_angle_data', 
-        filename_prefix="data_30",  # 自定义文件名
+        port='COM19',
+        out_folder = 'doit_data/without_ant', 
+        filename_prefix="data_50",  # 自定义文件名
         max_records=10  # 收集10组数据后停止
     )
     

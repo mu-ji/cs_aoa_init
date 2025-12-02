@@ -28,7 +28,7 @@ def load_numpy_data(filepath):
 # data = load_numpy_data('iq_data/data_0.npy')
 # data = load_numpy_data('wire_data/data_0.npy')
 # data = load_numpy_data('antenna_equipment_distance_data/data_0.npy')
-data = load_numpy_data('antenna_equipment_angle_data/data_30.npy')
+data = load_numpy_data('doit_data/without_ant/data_-40.npy')
 print(data)
 rx1_data_array = data['E9:D2:FF:FF:96:E8']
 rx2_data_array = data['DB:59:E3:17:FC:79']
@@ -163,8 +163,8 @@ for i in range(rx1_data_length):
     resolution = my_ifft.generate_range_resolution(mask_list, 4)
 
     print(data['distance_data'])
-    print(range_basic/2)
-    print(range_advanced/2)
-    print(distance/2)
-    print(sinc_index*resolution/2)
+    print(range_basic)
+    print(range_advanced)
+    print(distance)
+    print(sinc_index*resolution)
 
