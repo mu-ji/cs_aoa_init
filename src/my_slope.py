@@ -29,7 +29,7 @@ def cal_slope(phase):
 
 def cal_distance(slope):
     LIGHTSPEED = 299792458
-    return (LIGHTSPEED / (4 * np.pi))*slope
+    return -(LIGHTSPEED / (4 * np.pi))*slope
 
 
 

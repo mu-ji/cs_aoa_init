@@ -27,7 +27,8 @@ def load_numpy_data(filepath):
 
 # data = load_numpy_data('iq_data/data_0.npy')
 # data = load_numpy_data('wire_data/data_0.npy')
-data = load_numpy_data('antenna_equipment_data/data_1.npy')
+# data = load_numpy_data('antenna_equipment_distance_data/data_0.npy')
+data = load_numpy_data('antenna_equipment_angle_data/data_30.npy')
 print(data)
 rx1_data_array = data['E9:D2:FF:FF:96:E8']
 rx2_data_array = data['DB:59:E3:17:FC:79']
@@ -36,6 +37,7 @@ rx1_data_length = len(rx1_data_array)
 print(rx1_data_length)
 # rx2_data_array = np.load('iq_data/DB_59_E3_17_FC_79.npy', allow_pickle=True)
 rx2_data_length = len(rx2_data_array)
+
 
 
 def iq_pre_process(i_local, q_local, i_remote, q_remote):
@@ -137,7 +139,7 @@ print(used_channel_indices)
 LIGHTSPEED = 299792458
 
 for i in range(rx1_data_length):
-    data = rx2_data_array[i]
+    data = rx1_data_array[i]
 
     rx1_i_local = data['i_local'] 
     rx1_q_local = data['q_local']

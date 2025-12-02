@@ -42,46 +42,86 @@ def extract_data_from_buffer(buffer):
             
             # 匹配数组数据行
             if "i_local :" in line:
-                match_obj = re.search(r"i_local : ([-+]?\d*\.\d+|\d+)", line)
+                match_obj = re.search(r"i_local\s*:\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)", line)
                 if match_obj:
                     value = float(match_obj.group(1))
                     i_local.append(value)
             elif "q_local :" in line:
-                match_obj = re.search(r"q_local : ([-+]?\d*\.\d+|\d+)", line)
+                match_obj = re.search(r"q_local\s*:\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)", line)
                 if match_obj:
                     value = float(match_obj.group(1))
                     q_local.append(value)
             elif "i_remote :" in line:
-                match_obj = re.search(r"i_remote : ([-+]?\d*\.\d+|\d+)", line)
+                match_obj = re.search(r"i_remote\s*:\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)", line)
                 if match_obj:
                     value = float(match_obj.group(1))
                     i_remote.append(value)
             elif "q_remote :" in line:
-                match_obj = re.search(r"q_remote : ([-+]?\d*\.\d+|\d+)", line)
+                match_obj = re.search(r"q_remote\s*:\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)", line)
                 if match_obj:
                     value = float(match_obj.group(1))
                     q_remote.append(value)
-            # 匹配距离数据行
+            
+            # 匹配距离数据行 - 关键修改：处理nan值
             elif "Distance estimates" in line:
-                ifft_match = re.search(r"ifft: ([-+]?\d*\.\d+|\d+)", line)
-                phase_slope_match = re.search(r"phase_slope: ([-+]?\d*\.\d+|\d+)", line)
-                rtt_match = re.search(r"rtt: ([-+]?\d*\.\d+|\d+)", line)
-                address_match = re.search(r"Address: (\S+)", line)
-                
-                if ifft_match and phase_slope_match and rtt_match:
-                    distance_data = {
-                        'ifft': float(ifft_match.group(1)),
-                        'phase_slope': float(phase_slope_match.group(1)),
-                        'rtt': float(rtt_match.group(1))
-                    }
-                    if address_match:
-                        current_address = address_match.group(1)
-                        distance_data['address'] = current_address
+                # 匹配地址（可能包含冒号）
+                address_match = re.search(r"Address:\s*([^\s,]+)", line)
                 if address_match:
                     current_address = address_match.group(1)
-                    distance_data['address'] = current_address        
-        # 只有当数组长度正确时才保存（75个元素）
-        if len(i_local) == 75 and current_address != "unknown":
+                
+                # 匹配ifft值（可能为nan）
+                ifft_match = re.search(r"ifft:\s*(nan|[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)", line, re.IGNORECASE)
+                # 匹配phase_slope值（可能为nan）
+                phase_slope_match = re.search(r"phase_slope:\s*(nan|[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)", line, re.IGNORECASE)
+                # 匹配rtt值（可能为nan）
+                rtt_match = re.search(r"rtt:\s*(nan|[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)", line, re.IGNORECASE)
+                
+                # 构建distance_data字典，允许值为nan
+                distance_data = {}
+                if current_address != "unknown":
+                    distance_data['address'] = current_address
+                
+                # 处理ifft值
+                if ifft_match:
+                    ifft_str = ifft_match.group(1).lower()
+                    if ifft_str == 'nan':
+                        distance_data['ifft'] = float('nan')
+                    else:
+                        try:
+                            distance_data['ifft'] = float(ifft_str)
+                        except ValueError:
+                            distance_data['ifft'] = float('nan')
+                else:
+                    distance_data['ifft'] = float('nan')
+                
+                # 处理phase_slope值
+                if phase_slope_match:
+                    phase_slope_str = phase_slope_match.group(1).lower()
+                    if phase_slope_str == 'nan':
+                        distance_data['phase_slope'] = float('nan')
+                    else:
+                        try:
+                            distance_data['phase_slope'] = float(phase_slope_str)
+                        except ValueError:
+                            distance_data['phase_slope'] = float('nan')
+                else:
+                    distance_data['phase_slope'] = float('nan')
+                
+                # 处理rtt值
+                if rtt_match:
+                    rtt_str = rtt_match.group(1).lower()
+                    if rtt_str == 'nan':
+                        distance_data['rtt'] = float('nan')
+                    else:
+                        try:
+                            distance_data['rtt'] = float(rtt_str)
+                        except ValueError:
+                            distance_data['rtt'] = float('nan')
+                else:
+                    distance_data['rtt'] = float('nan')
+        
+        # 只有当数组长度正确时才保存（75个元素），即使distance_data中有nan值
+        if len(i_local) == 75 and len(q_local) == 75 and len(i_remote) == 75 and len(q_remote) == 75:
             data_block = {
                 'address': current_address,
                 'i_local': np.array(i_local, dtype=np.float64),
@@ -92,6 +132,9 @@ def extract_data_from_buffer(buffer):
                 'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
             data_blocks.append(data_block)
+        elif current_address != "unknown":
+            # 如果数组长度不正确，但至少有地址信息，可以保存一个警告记录
+            print(f"警告：数据块地址 {current_address} 的数组长度不正确（local_I={len(i_local)}, local_Q={len(q_local)}, remote_I={len(i_remote)}, remote_Q={len(q_remote)}）")
     
     return data_blocks
 
@@ -214,8 +257,8 @@ def read_and_process_serial(port=None,out_folder='iq_data', baudrate=115200, tim
                         )
                         
                         print(f"\n[数据块 #{data_count}] 地址: {address}")
-                        # print(f"  距离估计 - ifft: {data_block['distance_data']['ifft']:.3f}, "
-                        #       f"phase_slope: {data_block['distance_data']['phase_slope']:.3f}")
+                        print(f"  距离估计 - ifft: {data_block['distance_data']['ifft']:.3f}, "
+                              f"phase_slope: {data_block['distance_data']['phase_slope']:.3f}")
                         
                         # 显示当前数据统计
                         total_current = sum(len(records) for records in all_data.values())
@@ -267,8 +310,8 @@ if __name__ == "__main__":
     # max_records: 最大记录数，达到后自动停止
     read_and_process_serial(
         port='COM20',
-        out_folder = 'antenna_equipment_data', 
-        filename_prefix="data_1",  # 自定义文件名
+        out_folder = 'antenna_equipment_angle_data', 
+        filename_prefix="data_30",  # 自定义文件名
         max_records=10  # 收集10组数据后停止
     )
     
